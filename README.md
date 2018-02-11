@@ -118,5 +118,123 @@ hi , AKyS,orry,error!
 
 
 
+## 1、路由网关简介
+   - 服务网关是微服务架构中一个不可或缺的部分。通过服务网关统一向外系统提供REST API的过程中，除了具备服务路由、均衡负载功能之外，它还具备了权限控制等功能。Spring Cloud Netflix中的Zuul就担任了这样的一个角色，为微服务架构提供了前门保护的作用，同时将权限控制这些较重的非业务逻辑内容迁移到服务路由层面，使得服务集群主体能够具备更高的可复用性和可测试性。
+
+  - 路由在微服务体系结构的一个组成部分。例如，/可以映射到您的Web应用程序，/api/users映射到用户服务，并将/api/shop映射到商店服务。Zuul是Netflix的基于JVM的路由器和服务器端负载均衡器。
+
+  - Netflix使用Zuul进行以下操作：
+      - 认证
+      - 洞察
+      - 压力测试
+      - 金丝雀测试
+      - 动态路由
+      - 服务迁移
+      - 负载脱落
+      - 安全
+      - 静态响应处理
+      - 主动/主动流量管理
+      - Zuul的规则引擎允许基本上写任何JVM语言编写规则和过滤器，内置Java和Groovy。
+
+##2、什么是服务网关
+   服务网关 = 路由转发 + 过滤器
+   - 1、路由转发：接收一切外界请求，转发到后端的微服务上去。
+
+   - 2、过滤器：在服务网关中可以完成一系列的横切功能，例如权限校验、限流以及监控等，这些都可以通过过滤器完成（其实路由转发也是通过过滤器实现的）。
+
+##3、为什么需要服务网关
+
+- 上述所说的横切功能（以权限校验为例）可以写在三个位置：
+
+ - 每个服务自己实现一遍
+           第一种，缺点太明显，基本不用；
+ - 写到一个公共的服务中，然后其他所有服务都依赖这个服务
+     - 第二种，相较于第一点好很多，代码开发不会冗余，但是有两个缺点：
+          - 由于每个服务引入了这个公共服务，那么相当于在每个服务中都引入了相同的权限校验的代码，使得每个服务的jar包大小无故增加了一些，尤其是对于使用docker镜像进行部署的场景，jar越小越好；
+由于每个服务都引入了这个公共服务，那么我们后续升级这个服务可能就比较困难，而且公共服务的功能越多，升级就越难，而且假设我们改变了公共服务中的权限校验的方式，想让所有的服务都去使用新的权限校验方式，我们就需要将之前所有的服务都重新引包，编译部署。
+ - 写到服务网关的前置过滤器中，所有请求过来进行权限校验
+      - 将权限校验的逻辑写在网关的过滤器中，后端服务不需要关注权限校验的代码，所以服务的jar包中也不会引入权限校验的逻辑，不会增加jar包大小；
+      - 如果想修改权限校验的逻辑，只需要修改网关中的权限校验过滤器即可，而不需要升级所有已存在的微服务。
+
+##4、服务网关技术选型
+
+![](http://upload-images.jianshu.io/upload_images/325120-b897cf7641024e3a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+引入服务网关后的微服务架构如上，总体包含三部分：服务网关、open-service和service。
+
+ - 1、总体流程：
+
+    - 服务网关、open-service和service启动时注册到注册中心上去；
+    - 用户请求时直接请求网关，网关做智能路由转发（包括服务发现，负载均衡）到open-service，这其中包含权限校验、监控、限流等操作
+open-service聚合内部service响应，返回给网关，网关再返回给用户
+ - 2、引入网关的注意点
+
+      - 增加了网关，多了一层转发（原本用户请求直接访问open-service即可），性能会下降一些（但是下降不大，通常，网关机器性能会很好，而且网关与open-service的访问通常是内网访问，速度很快）；
+      - 网关的单点问题：在整个网络调用过程中，一定会有一个单点，可能是网关、nginx、dns服务器等。防止网关单点，可以在网关层前边再挂一台nginx，nginx的性能极高，基本不会挂，这样之后，网关服务就可以不断的添加机器。但是这样一个请求就转发了两次，所以最好的方式是网关单点服务部署在一台牛逼的机器上（通过压测来估算机器的配置），而且nginx与zuul的性能比较，根据国外的一个哥们儿做的实验来看，其实相差不大，zuul是netflix开源的一个用来做网关的开源框架；
+      - 网关要尽量轻。
+ - 3、服务网关基本功能
+
+      - 智能路由：接收外部一切请求，并转发到后端的对外服务open-service上去；
+      - 注意：我们只转发外部请求，服务之间的请求不走网关，这就表示全链路追踪、内部服务API监控、内部服务之间调用的容错、智能路由不能在网关完成；当然，也可以将所有的服务调用都走网关，那么几乎所有的功能都可以集成到网关中，但是这样的话，网关的压力会很大，不堪重负。
+      - 权限校验：只校验用户向open-service服务的请求，不校验服务内部的请求。服务内部的请求有必要校验吗？
+      - API监控：只监控经过网关的请求，以及网关本身的一些性能指标（例如，gc等）；
+      - 限流：与监控配合，进行限流操作；
+      - API日志统一收集：类似于一个aspect切面，记录接口的进入和出去时的相关日志
+
+## 5、项目集成
+
+   -   创建service-zuui  项目 ，其pom.xml文件内容是
+   
+   ![](http://upload-images.jianshu.io/upload_images/325120-3d340e12046fbbc4.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+  -  在applicaton类加上注解@EnableZuulProxy，开启zuul的功能：
+
+   ![](http://upload-images.jianshu.io/upload_images/325120-66be41fadf9be2cf.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+- 配置文件application.yml
+
+ ![](http://upload-images.jianshu.io/upload_images/325120-60c9ef2161da7493.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+- 首先指定服务注册中心的地址为[http://localhost:8761/eureka/](http://localhost:8761/eureka/)，服务的端口为8769，服务名为service-zuul；以/api-a/ 开头的请求都转发给service-ribbon服务；以/api-b/开头的请求都转发给service-ribbon服务；
+
+依次运行这五个工程;打开浏览器访问：[http://localhost:8769/api-a/hi?name=AKyS](http://localhost:8769/api-a/hi?name=AKyS) ;浏览器显示：
+
+> hi AKyS,i am from port:8762
+
+打开浏览器访问：[http://localhost:8769/api-b/hi?name=AKyS](http://localhost:8769/api-b/hi?name=AKyS) ;浏览器显示：
+
+> hi AKyS,i am from port:8762
+
+
+##6、服务过滤
+
+   - zuul不仅只是路由，并且还能过滤，做一些安全验证。继续改造工程；
+
+  ![](http://upload-images.jianshu.io/upload_images/325120-020d6e7432eec040.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+*   filterType：返回一个字符串代表过滤器的类型，在zuul中定义了四种不同生命周期的过滤器类型，具体如下： 
+
+    *   pre：路由之前
+    *   routing：路由之时
+    *   post： 路由之后
+    *   error：发送错误调用
+    *   filterOrder：过滤的顺序
+    *   shouldFilter：这里可以写逻辑判断，是否要过滤，本文true,永远过滤。
+    *   run：过滤器的具体逻辑。可用很复杂，包括查sql，nosql去判断该请求到底有没有权限访问。
+
+这时访问：[http://localhost:8769/api-a/hi?name=AKyS](http://localhost:8769/api-a/hi?name=AKyS) ；网页显示：
+
+> token is empty
+
+访问 [http://localhost:8769/api-a/hi?name=AKyS&token=22](http://localhost:8769/api-a/hi?name=AKyS&token=22) ； 
+网页显示：
+
+> hi AKyS,i am from port:8762
+
+注意事项：
+
+   本文参考 博客文章地址   [[史上最简单的SpringCloud教程 | 第五篇: 路由网关(zuul)](http://blog.csdn.net/forezp/article/details/69939114)
+](http://blog.csdn.net/forezp/article/details/69939114)
+
 
 
