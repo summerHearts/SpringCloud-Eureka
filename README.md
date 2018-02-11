@@ -27,3 +27,52 @@
 - 访问 http://localhost:8762/hi?name=AKyS
 
 ![](http://upload-images.jianshu.io/upload_images/325120-6bc95a47f4dcbf1a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+
+##2、服务消费者
+
+  - 在微服务架构中，业务都会被拆分成一个独立的服务，服务与服务的通讯是基于http restful的。
+这里我们使用ribbon ，实现服务的转发功能，从而实现负载均衡。
+
+  - 在Spring Cloud框架中，负载均衡服务本身也要作为一个发现客户端注册到Eureka服务器上。客户发起一个请求时，需要在Eureke服务器上发现负载均衡服务，负载均衡服务通过RestTemplate调用微服务的接口时，会通过Ribbon进行负载均衡。这样，不同的服务请求会由负载均衡机制分别调用微服务的不同实例。
+
+![](http://upload-images.jianshu.io/upload_images/325120-301c666d55157fbb.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+ - ribbon 是一个客户端负载均衡器，可以简单的理解成类似于 nginx的负载均衡模块的功能。ribbon是一个为客户端提供负载均衡功能的服务，它内部提供了一个叫做ILoadBalance的接口代表负载均衡器的操作，比如有添加服务器操作、选择服务器操作、获取所有的服务器列表、获取可用的服务器列表等等。
+
+- Ribbon的工作原理
+     分为两步： 
+    - 1、 第一步有限选择Eureka Server，它优先选择在同一个Zone且负载较少的Server， 
+    - 2、 第二步在根据用户指定的策略，在从Server取到的服务注册列表中选择一个地址。其中Ribbon提供了多重策略，例如轮询round robin、随机Random、根据相应时间加权等。
+
+## 项目中如何配置
+   - 新建项目Server-Ribbon项目
+
+   - application.yml  配置信息
+
+     ![](http://upload-images.jianshu.io/upload_images/325120-cb14556a1e3af8a9.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+    - pom文件配置
+
+  ![](http://upload-images.jianshu.io/upload_images/325120-7bd1b2f52dc153e5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+  -   启动类注入
+
+  ![](http://upload-images.jianshu.io/upload_images/325120-573095172f225e40.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+   - 首先先使用ribbon提供的LoadBalanced注解加在RestTemplate上面，这个注解会自动构造LoadBalancerClient接口的实现类并注册到Spring容器中。
+
+   - 接下来使用RestTemplate进行rest操作的时候，会自动使用负载均衡策略，它内部会在RestTemplate中加入LoadBalancerInterceptor这个拦截器，这个拦截器的作用就是使用负载均衡。
+
+![](http://upload-images.jianshu.io/upload_images/325120-a87b8adeb763b66b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+在浏览器上多次访问http://localhost:8764/hi?name=AKyS，浏览器交替显示：
+
+```
+hi AKyS,i am from port:8762
+
+hi AKyS,i am from port:8763
+```
+
+-  当sercvice-ribbon通过restTemplate调用service-consumer的hi接口时，因为用ribbon进行了负载均衡，会轮流的调用service-consumer：8762和8763 两个端口的hi接口。这样就能实现交替服务的提供。
+
