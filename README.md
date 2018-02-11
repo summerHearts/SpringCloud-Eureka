@@ -76,3 +76,47 @@ hi AKyS,i am from port:8763
 
 -  当sercvice-ribbon通过restTemplate调用service-consumer的hi接口时，因为用ribbon进行了负载均衡，会轮流的调用service-consumer：8762和8763 两个端口的hi接口。这样就能实现交替服务的提供。
 
+
+- 1、Hystrix简介 
+
+  ![](http://upload-images.jianshu.io/upload_images/325120-b13d814ddba53a56.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+  [Hystrix](https://github.com/Netflix/Hystrix)是Netflix针对微服务分布式系统的熔断保护中间件，当我们的客户端连接远程的微服务时，有两种情况需要考虑：首先，如果远程系统当机了我们怎么办？其次，我们如何管理对远程微服务的调用性能，以保证每个微服务以最小延迟最快性能响应？
+ 
+  Hystrix是一个有关延迟和失败容错的开源库包，用来设计隔离访问远程系统端点或微服务等，防止级联爆炸式的失败，也就是由一个小问题引起接二连三扩大的疯狂的错误爆炸直至整个系统瘫痪，能够让复杂的分布式系统更加灵活具有弹性。
+
+-  2、 如何在项目中使用断路由
+
+    启动`eureka-consumer`和 `eureka-server`服务。
+
+    改造`serice-ribbon` 工程的代码，首先在pox.xml文件中加入`spring-cloud-starter-hystrix`的起步依赖：
+
+    ![](http://upload-images.jianshu.io/upload_images/325120-eab2d776897e2f67.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+在程序的启动类`ServiceRibbonApplication `加`@EnableHystrix`注解开启`Hystrix`
+
+   ![](http://upload-images.jianshu.io/upload_images/325120-e0b8b819d4674c72.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+ ` @HystrixCommand`注解。该注解对该方法创建了熔断器的功能，并指定了`fallbackMethod`熔断方法，熔断方法直接返回了一个字符串，字符串为”hi,”+name+”,sorry,error!”
+
+   ![](http://upload-images.jianshu.io/upload_images/325120-8a9d8ec7669b68e0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+   启动：`service-ribbon` 工程，当我们访问http://localhost:8764/hi?name=AKyS,浏览器显示：
+
+```
+hi AKyS,i am from port:8762
+```
+  当关闭 `eureka-consumer`服务，浏览器显示：
+
+ ```
+hi , AKyS,orry,error!
+```
+
+很早之前看到过一句话： 
+
+![](http://upload-images.jianshu.io/upload_images/325120-88cb6aad083e4c85.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/800)
+
+
+
+
+
